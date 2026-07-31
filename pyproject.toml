@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wave-analyser"
+version = "0.1.0"
+description = "Driver for the II-VI / Finisar WaveAnalyzer 1500S optical spectrum analyser"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "numpy",
+    "requests",
+]
+
+[project.optional-dependencies]
+plot = ["matplotlib"]
+dev = ["pytest", "pytest-mock", "matplotlib"]
+
+[project.scripts]
+wave-analyser = "wave_analyser.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-v"
+testpaths = ["tests"]
+markers = [
+    "hw: requires a physical WaveAnalyzer 1500S on the network",
+]
