@@ -64,6 +64,7 @@ wa.scan_full(port="HighSens", coarse=False) # 20 MHz step, higher resolution
 | `scan_full(port, coarse)` | Full-range scan across the operating range |
 | `wait_for_scan(timeout, poll_interval)` | Block until a fresh scan completes |
 | `get_data(triggerin)` | Fetch the trace on a dBm scale as a `ScanData` |
+| `get_fresh_data(triggerin, timeout, poll_interval)` | Wait for two scans, then `get_data()` — guarantees a trace acquired after your last change |
 | `get_linear_data(triggerin)` | Fetch the trace on a linear scale (firmware ≥ 1.02) |
 
 `ScanData` fields: `scan_id`, `freq_mhz`, `power_dbm`, `power_x_dbm`,

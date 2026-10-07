@@ -175,6 +175,33 @@ class WaveAnalyzer1500S:
             trigger_flag=trigger_flag,
         )
 
+    def get_fresh_data(self, triggerin: bool = False, timeout: float = 5.0,
+                       poll_interval: float = 0.1) -> ScanData:
+        """Fetch a trace acquired entirely after the caller's last change.
+
+        The instrument scans continuously, so when the laser, RF or scan
+        settings change, a scan is usually already in progress. The first
+        wait_for_scan() returns when that in-flight scan completes, but it
+        began before the change and so may hold a mix of old and new
+        conditions. The second wait_for_scan() returns only once a scan that
+        started after the change has completed, which is what get_data()
+        then reads.
+
+        Args:
+            triggerin: Passed through to get_data().
+            timeout: Per-wait timeout passed to each wait_for_scan() call.
+            poll_interval: Passed through to wait_for_scan().
+
+        Returns:
+            The same ScanData object get_data() returns.
+
+        Raises:
+            TimeoutError: if either wait does not see a new scan in time.
+        """
+        self.wait_for_scan(timeout=timeout, poll_interval=poll_interval)
+        self.wait_for_scan(timeout=timeout, poll_interval=poll_interval)
+        return self.get_data(triggerin=triggerin)
+
     def get_linear_data(self, triggerin: bool = False) -> ScanData:
         """Fetch the most recent measurement trace on a linear (mW) scale.
 

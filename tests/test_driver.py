@@ -138,6 +138,20 @@ def test_get_data_triggerin_adds_param_and_flags(instrument):
     np.testing.assert_array_equal(scan.trigger_flag, [1])
 
 
+def test_get_fresh_data_waits_twice_then_fetches(instrument):
+    calls = MagicMock()
+    sentinel = object()
+    with patch.object(instrument, "wait_for_scan", calls.wait_for_scan), \
+            patch.object(instrument, "get_data", calls.get_data):
+        calls.get_data.return_value = sentinel
+        result = instrument.get_fresh_data(triggerin=True, timeout=2.0)
+
+    assert result is sentinel
+    assert [c[0] for c in calls.mock_calls] == ["wait_for_scan", "wait_for_scan", "get_data"]
+    calls.get_data.assert_called_once_with(triggerin=True)
+    assert all(c.kwargs["timeout"] == 2.0 for c in calls.wait_for_scan.call_args_list)
+
+
 def test_get_linear_data_parses_binary_records(instrument):
     header = b"{}".ljust(1000, b"\x00")
     records = [
