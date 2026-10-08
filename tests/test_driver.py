@@ -152,6 +152,55 @@ def test_get_fresh_data_waits_twice_then_fetches(instrument):
     assert all(c.kwargs["timeout"] == 2.0 for c in calls.wait_for_scan.call_args_list)
 
 
+def _scan(scan_id, power_dbm, freq=(191_000_000, 191_000_100)):
+    p = np.asarray(power_dbm, dtype=float)
+    return ScanData(scan_id=scan_id, freq_mhz=np.asarray(freq, dtype=float),
+                    power_dbm=p, power_x_dbm=p - 3, power_y_dbm=p - 3)
+
+
+def test_get_averaged_data_averages_in_linear_power(instrument):
+    with patch.object(instrument, "wait_for_scan") as wait, \
+            patch.object(instrument, "get_data") as get_data:
+        get_data.side_effect = [_scan(1, [-30.0, -20.0]), _scan(2, [-40.0, -20.0])]
+        avg = instrument.get_averaged_data(2, timeout=2.0)
+
+    # one flush wait plus one wait per scan
+    assert wait.call_count == 3
+    assert all(c.kwargs["timeout"] == 2.0 for c in wait.call_args_list)
+    assert avg.scan_id == 2
+    expected = 10 * np.log10((1e-3 + 1e-4) / 2)  # -32.6 dBm, not -35
+    np.testing.assert_allclose(avg.power_dbm, [expected, -20.0])
+    np.testing.assert_allclose(avg.power_x_dbm, [expected - 3, -23.0])
+    np.testing.assert_allclose(avg.freq_mhz, [191_000_000, 191_000_100])
+
+
+def test_get_averaged_data_single_scan_is_identity(instrument):
+    with patch.object(instrument, "wait_for_scan"), \
+            patch.object(instrument, "get_data", return_value=_scan(5, [-12.345, -10.0])):
+        avg = instrument.get_averaged_data(1)
+    np.testing.assert_allclose(avg.power_dbm, [-12.345, -10.0])
+
+
+def test_get_averaged_data_rejects_bad_n_avg(instrument):
+    with pytest.raises(ValueError, match="n_avg must be >= 1"):
+        instrument.get_averaged_data(0)
+
+
+def test_get_averaged_data_rejects_repeated_scan(instrument):
+    with patch.object(instrument, "wait_for_scan"), \
+            patch.object(instrument, "get_data", side_effect=[_scan(1, [-30, -30])] * 2):
+        with pytest.raises(RuntimeError, match="read twice"):
+            instrument.get_averaged_data(2)
+
+
+def test_get_averaged_data_rejects_changed_grid(instrument):
+    with patch.object(instrument, "wait_for_scan"), \
+            patch.object(instrument, "get_data", side_effect=[
+                _scan(1, [-30, -30]), _scan(2, [-30, -30], freq=(1, 2))]):
+        with pytest.raises(ValueError, match="frequency grid changed"):
+            instrument.get_averaged_data(2)
+
+
 def test_get_linear_data_parses_binary_records(instrument):
     header = b"{}".ljust(1000, b"\x00")
     records = [

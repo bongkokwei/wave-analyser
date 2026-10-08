@@ -202,6 +202,61 @@ class WaveAnalyzer1500S:
         self.wait_for_scan(timeout=timeout, poll_interval=poll_interval)
         return self.get_data(triggerin=triggerin)
 
+    def get_averaged_data(self, n_avg: int, timeout: float = 5.0,
+                          poll_interval: float = 0.1) -> ScanData:
+        """Average `n_avg` fresh scans point by point into a single trace.
+
+        The instrument's Web API has no averaging setting (that lives in the
+        GUI and the PC-side Analysis Server), so this averages in software.
+        A first wait_for_scan() discards the scan in flight, as in
+        get_fresh_data(); each trace is then read after its own
+        wait_for_scan(), so no sweep is counted twice.
+
+        Powers are averaged in linear units and converted back to dBm:
+        averaging dBm values directly gives a geometric mean, which reads
+        low on noise.
+
+        Args:
+            n_avg: Number of scans to average (>= 1).
+            timeout: Per-wait timeout passed to each wait_for_scan() call.
+            poll_interval: Passed through to wait_for_scan().
+
+        Returns:
+            A ScanData whose scan_id is that of the last scan used.
+
+        Raises:
+            ValueError: if n_avg < 1, or the frequency grid changes between
+                scans (e.g. set_scan() was called mid-average).
+            RuntimeError: if the same scan id is read twice.
+            TimeoutError: if any wait does not see a new scan in time.
+        """
+        if n_avg < 1:
+            raise ValueError(f"n_avg must be >= 1, got {n_avg}")
+
+        self.wait_for_scan(timeout=timeout, poll_interval=poll_interval)
+        scans: list[ScanData] = []
+        for _ in range(n_avg):
+            self.wait_for_scan(timeout=timeout, poll_interval=poll_interval)
+            scan = self.get_data()
+            if scans:
+                if scan.scan_id == scans[-1].scan_id:
+                    raise RuntimeError(f"scan {scan.scan_id} read twice")
+                if not np.array_equal(scan.freq_mhz, scans[0].freq_mhz):
+                    raise ValueError("frequency grid changed between scans")
+            scans.append(scan)
+
+        def linear_mean_dbm(field: str) -> np.ndarray:
+            mw = np.stack([10 ** (getattr(s, field) / 10) for s in scans])
+            return 10 * np.log10(mw.mean(axis=0))
+
+        return ScanData(
+            scan_id=scans[-1].scan_id,
+            freq_mhz=scans[0].freq_mhz,
+            power_dbm=linear_mean_dbm("power_dbm"),
+            power_x_dbm=linear_mean_dbm("power_x_dbm"),
+            power_y_dbm=linear_mean_dbm("power_y_dbm"),
+        )
+
     def get_linear_data(self, triggerin: bool = False) -> ScanData:
         """Fetch the most recent measurement trace on a linear (mW) scale.
 

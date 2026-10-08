@@ -54,6 +54,27 @@ wa.scan_full(port="Normal", coarse=True)    # 100 MHz step, faster
 wa.scan_full(port="HighSens", coarse=False) # 20 MHz step, higher resolution
 ```
 
+### Averaging
+
+The instrument's Web API has no averaging setting (the GUI's *Number of
+Averages* and the Analysis Server's `averages=` parameter both run on the PC),
+so `get_averaged_data()` averages in software:
+
+```python
+wa.set_scan(center_mhz=193_700_000, span_mhz=1_000_000, tag="Normal")
+scan = wa.get_averaged_data(n_avg=16)   # takes ~n_avg + 1 sweep periods
+```
+
+It discards the scan in flight, then reads `n_avg` distinct scans and averages
+each power trace in linear units:
+
+$$\bar{P}_\text{dBm} = 10\log_{10}\Big(\tfrac{1}{N}\sum_k 10^{P_k/10}\Big)$$
+
+Averaging dBm values directly would read low on noise. This is a block mean of
+`n_avg` traces, not the GUI's running average, so results will not match the
+GUI exactly. `timeout` applies per scan, so raise it for wide or 20 MHz-step
+scans.
+
 ### API
 
 | Method | Purpose |
@@ -65,6 +86,7 @@ wa.scan_full(port="HighSens", coarse=False) # 20 MHz step, higher resolution
 | `wait_for_scan(timeout, poll_interval)` | Block until a fresh scan completes |
 | `get_data(triggerin)` | Fetch the trace on a dBm scale as a `ScanData` |
 | `get_fresh_data(triggerin, timeout, poll_interval)` | Wait for two scans, then `get_data()` — guarantees a trace acquired after your last change |
+| `get_averaged_data(n_avg, timeout, poll_interval)` | Average `n_avg` fresh scans in linear power, returned as `ScanData` |
 | `get_linear_data(triggerin)` | Fetch the trace on a linear scale (firmware ≥ 1.02) |
 
 `ScanData` fields: `scan_id`, `freq_mhz`, `power_dbm`, `power_x_dbm`,
